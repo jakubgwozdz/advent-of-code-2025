@@ -1,7 +1,8 @@
-.gradle/
-.idea/
-.kotlin/
+/.gradle/
+/.idea/
+/.kotlin/
 build/
+/out
 /local/
 .DS_Store
 
