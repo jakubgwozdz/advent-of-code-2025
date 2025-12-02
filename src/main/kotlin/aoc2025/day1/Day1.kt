@@ -37,5 +37,8 @@ fun part1(data: String) = solve(data) { prev, turns ->
 }
 
 fun part2(data: String) = solve(data) { prev, turns ->
-    (if (turns > 0) prev + turns else (100 - prev) % 100 - turns) / 100
+    when {
+        turns > 0 -> (prev + turns) / 100
+        else -> ((100 - prev) % 100 - turns) / 100
+    }
 }

@@ -13,3 +13,4 @@ internal fun eventAndDayFromPackage(x: Any): Pair<Int, Int> = x.javaClass.packag
     substringAfter("aoc").substringBefore(".").toInt() to substringAfter("day").substringBefore(".").toInt()
 }.debug { "eventAndDayFromPackage($x) = $it" }
 
+inline fun catching(block: () -> Unit) = try { block() } catch (e: Throwable) { e.printStackTrace() }
