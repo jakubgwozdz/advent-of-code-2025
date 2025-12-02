@@ -24,12 +24,13 @@ val capitalized = puzzle.replaceFirstChar { if (it.isLowerCase()) it.titlecase(L
 val template = """
     package $event.$puzzle
 
+    import catching
     import debug
     import go
     import eventAndDayFromPackage
     import provideInput
 
-    fun main() {
+    fun main() = catching {
         val (event, day) = eventAndDayFromPackage { }
         val input = provideInput(event, day)
         go("part 1") { part1(input) }

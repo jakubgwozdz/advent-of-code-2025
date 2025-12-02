@@ -1,10 +1,11 @@
 package aoc2025.day1
 
+import catching
 import go
 import eventAndDayFromPackage
 import provideInput
 
-fun main() {
+fun main() = catching {
     val (event, day) = eventAndDayFromPackage { }
     val input = provideInput(event, day)
     val ex1 = """

@@ -13,4 +13,5 @@ internal fun eventAndDayFromPackage(x: Any): Pair<Int, Int> = x.javaClass.packag
     substringAfter("aoc").substringBefore(".").toInt() to substringAfter("day").substringBefore(".").toInt()
 }.debug { "eventAndDayFromPackage($x) = $it" }
 
+// this is only, so the main does not end with an error causing intellij to scroll output
 inline fun catching(block: () -> Unit) = try { block() } catch (e: Throwable) { e.printStackTrace() }
