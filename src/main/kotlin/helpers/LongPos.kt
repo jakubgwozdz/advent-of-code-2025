@@ -3,6 +3,8 @@ package helpers
 @JvmInline
 value class LongPos(val value: Long) {
     constructor(row: Int, col: Int) : this(longPos(row, col).value)
+    operator fun component1() = row
+    operator fun component2() = col
     override fun toString() = "$row,$col"
 }
 

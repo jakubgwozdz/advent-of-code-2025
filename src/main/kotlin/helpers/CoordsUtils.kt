@@ -23,6 +23,9 @@ fun Pos.sw(): Pos = Pos(row + 1, col - 1)
 fun Pos.w(dist: Int = 1): Pos = Pos(row, col - dist)
 fun Pos.nw(): Pos = Pos(row - 1, col - 1)
 
+fun LongPos.neighbours8(): Iterable<Pos> =
+    listOf(n(), e(), s(), w(), ne(), se(), sw(), nw())
+
 enum class Direction {
     N, E, S, W;
 
