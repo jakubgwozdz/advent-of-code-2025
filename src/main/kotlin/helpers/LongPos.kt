@@ -2,6 +2,7 @@ package helpers
 
 @JvmInline
 value class LongPos(val value: Long) {
+    constructor(row: Int, col: Int) : this(longPos(row, col).value)
     override fun toString() = "$row,$col"
 }
 
