@@ -39,7 +39,7 @@ fun part2(data: String): Any {
     return result
 }
 
-private fun parse(data: String): List<IntArray> {
+fun parse(data: String): List<IntArray> {
     // parse, O(n)
     val lines = data.reader().readLines()
     val array = lines.map { IntArray(it.length) }
