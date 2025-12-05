@@ -31,7 +31,7 @@ fun part2(data: String): Long {
                 result += (range.last - range.first + 1)
                 currentEnd = range.last
             }
-            range.first <= currentEnd && range.last > currentEnd -> { // extend
+            range.last > currentEnd -> { // extend
                 result += (range.last - currentEnd)
                 currentEnd = range.last
             }
