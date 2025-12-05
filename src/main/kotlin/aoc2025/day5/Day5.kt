@@ -24,16 +24,16 @@ fun part2(data: String): Long {
         .map { it.split("-").let { (a, b) -> a.toLong()..b.toLong() } }
 
     var result = 0L
-    var current = -1L
-    ranges.sortedBy(LongRange::first).forEach { next ->
+    var currentEnd = -1L
+    ranges.sortedBy(LongRange::first).forEach { range ->
         when  {
-            next.first > current -> { // new range
-                result += (next.last - next.first + 1)
-                current = next.last
+            range.first > currentEnd -> { // new range
+                result += (range.last - range.first + 1)
+                currentEnd = range.last
             }
-            next.first <= current && next.last > current -> { // extend
-                result += (next.last - current)
-                current = next.last
+            range.first <= currentEnd && range.last > currentEnd -> { // extend
+                result += (range.last - currentEnd)
+                currentEnd = range.last
             }
             else -> {} // skip, overlapping
         }
