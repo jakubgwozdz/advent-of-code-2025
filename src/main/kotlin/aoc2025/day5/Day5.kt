@@ -19,13 +19,24 @@ fun part1(data: String): Any {
     return ids.count { id -> ranges.any { it.contains(id) } }
 }
 
-fun part2(data: String) = data.reader().readLines().takeWhile { it.isNotBlank() }
-    .map { it.split("-").let { (a, b) -> a.toLong()..b.toLong() } }
-    .sortedBy(LongRange::first)
-    .fold(0L to LongRange.EMPTY) { (count, range), next ->
-        when (next.first) {
-            in range if next.last in range -> count to range
-            in range -> count + (next.last - range.last) to range.first..next.last
-            else -> count + (next.last + 1 - next.first) to next
+fun part2(data: String): Long {
+    val ranges = data.reader().readLines().takeWhile { it.isNotBlank() }
+        .map { it.split("-").let { (a, b) -> a.toLong()..b.toLong() } }
+
+    var result = 0L
+    var current = -1L
+    ranges.sortedBy(LongRange::first).forEach { next ->
+        when  {
+            next.first > current -> { // new range
+                result += (next.last - next.first + 1)
+                current = next.last
+            }
+            next.first <= current && next.last > current -> { // extend
+                result += (next.last - current)
+                current = next.last
+            }
+            else -> {} // skip, overlapping
         }
-    }.first
+    }
+    return result
+}
