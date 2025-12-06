@@ -32,8 +32,8 @@ private fun solve(data: String, numbersOp: (List<String>) -> List<Long>): Long {
     return parts.sumOf { part ->
         val args = numbersOp(part.dropLast(1))
         when (part.last().first()) {
-            '+' -> args.sum()
-            '*' -> args.fold(1L) { acc, list -> acc * list }
+            '+' -> args.reduce(Long::plus)
+            '*' -> args.reduce(Long::times)
             else -> error("Unknown op")
         }
     }
