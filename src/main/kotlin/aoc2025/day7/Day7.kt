@@ -34,20 +34,24 @@ fun main() = catching {
 }
 
 fun part1(data: String): Any {
-    val strings = data.reader().readLines()
-    val start = strings.first().indexOf('S')
-    return strings.drop(1).fold(setOf(start) to 0) { (acc, count), s ->
-        val newAcc = mutableSetOf<Int>()
-        var newCount = count
-        acc.forEach { i ->
-            if (s[i] == '^') {
-                newAcc += i - 1
-                newAcc += i + 1
-                newCount++
-            } else newAcc += i
+    val lines = data.reader().readLines()
+    var splits = 0
+    var beams = setOf<Int>()
+    lines.forEach { line ->
+        beams = buildSet {
+            if (beams.isEmpty()) add(line.indexOf('S'))
+            else beams.forEach { i ->
+                if (line[i] == '^') {
+                    add(i - 1)
+                    add(i + 1)
+                    splits++
+                } else {
+                    add(i)
+                }
+            }
         }
-        newAcc to newCount
-    }.second
+    }
+    return splits
 }
 
 fun part2(data: String): Any {
