@@ -34,7 +34,7 @@ fun main() = catching {
 }
 
 fun part1(data: String): Any {
-    val strings = data.reader().readLines().filterIndexed { i, s -> i % 2 == 0 }
+    val strings = data.reader().readLines()
     val start = strings.first().indexOf('S')
     return strings.drop(1).fold(setOf(start) to 0) { (acc, count), s ->
         val newAcc = mutableSetOf<Int>()
