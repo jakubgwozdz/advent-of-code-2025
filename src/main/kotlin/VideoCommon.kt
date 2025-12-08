@@ -12,8 +12,9 @@ import javax.swing.JPanel
 import javax.swing.Timer
 
 fun Color.withAlpha(a: Int) = Color(red, green, blue, a)
-fun Color.shifted(id: Int): Color = Color.RGBtoHSB(red, green, blue, null)
-    .let { (h, s, b) -> Color.getHSBColor(h + id * 0.1f + 0.5f, s, 1.0f - (1.0f - b) * 0.4f) }
+fun Color.shifted(id: Int): Color = shifted(id * 0.1f + 0.5f)
+fun Color.shifted(part: Float): Color = Color.RGBtoHSB(red, green, blue, null)
+    .let { (h, s, b) -> Color.getHSBColor(h + part, s, 1.0f - (1.0f - b) * 0.4f) }
     .withAlpha(alpha)
 
 fun Color.withBrightness(b: Float): Color = Color.RGBtoHSB(red, green, blue, null)

@@ -23,7 +23,6 @@ import java.util.concurrent.atomic.AtomicReference
 
 data class AnimState(
     val arrays: List<IntArray>,
-    val step: Int = 0,
     val result: Int = 0,
     val lastChecked: Pos = Pos(-1, -1),
 )
@@ -53,7 +52,7 @@ fun main() {
     while (removed.isNotEmpty()) {
         val pos = removed.removeLast()
         result++
-        anim.getAndUpdate { it.copy(step = it.step + 1, result = result, lastChecked = pos) }
+        anim.getAndUpdate { it.copy(result = result, lastChecked = pos) }
         sleep(3)
         pos.neighbours8().forEach { p1 ->
             val (r1, c1) = p1
@@ -63,9 +62,8 @@ fun main() {
             }
         }
     }
-    anim.getAndUpdate { it.copy(step = it.step + 1, result = result, lastChecked = Pos(-1, -1)) }
+    anim.getAndUpdate { it.copy(result = result, lastChecked = Pos(-1, -1)) }
 
-    println("FINISH after ${anim.get().step} steps")
 
 }
 

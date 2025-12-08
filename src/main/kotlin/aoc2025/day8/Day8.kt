@@ -5,11 +5,7 @@ import go
 import eventAndDayFromPackage
 import provideInput
 
-fun main() = catching {
-    val (event, day) = eventAndDayFromPackage { }
-    val input = provideInput(event, day)
-
-    val ex1 = """
+val ex1 = """
         162,817,812
         57,618,57
         906,360,560
@@ -32,7 +28,10 @@ fun main() = catching {
         425,690,689
     """.trimIndent()
 
-    go("part 1 ex1", 40) { part1(ex1, 10) }
+fun main() = catching {
+    val (event, day) = eventAndDayFromPackage { }
+    val input = provideInput(event, day)
+
     go("part 1", 352584) { part1(input) }
     go("part 2 ex1", 25272) { part2(ex1) }
     go("part 2", 9617397716) { part2(input) }
