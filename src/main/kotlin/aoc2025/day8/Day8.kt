@@ -71,8 +71,7 @@ fun part1(data: String, conns: Int = 1000) = solve(data) { boxes, connections, u
 }
 
 fun part2(data: String) = solve(data) { boxes, connections, uf ->
-    repeat(connections.size) {
-        val (b1, b2, _) = connections[it]
+    connections.forEach {(b1, b2, _)->
         uf.union(b1, b2)
         val p1 = uf.find(b1)
         if (boxes.all { uf.find(it) == p1 }) return@solve b1.first * b2.first
