@@ -45,6 +45,7 @@ fun main() {
     repeat(10) {
         println(10 - it)
         sleep(1000)
+
     }
 
     var added = 0
@@ -87,20 +88,15 @@ class Day8Video(val boundingMin: Pos3, val boundingMax: Pos3, val count: Int) {
     val bounds = calculateBounds(boundingMin, boundingMax, center, camera0)
         .debug()
 
+    val startAt = System.currentTimeMillis()
+
     fun paintOnImage(state: AnimState, image: BufferedImage) = image.useGraphics { g ->
         g.color = bgColor//.withAlpha(200)
         g.fillRect(0, 0, image.width, image.height)
         g.stroke = BasicStroke(5.1f)
 
-        val angle = Math.toRadians(System.currentTimeMillis() / 50.0)
-        val dx = camera0.first - center.first
-        val dy = camera0.second - center.second
-
-        val camera = Pos3(
-            (center.first + dx * cos(angle) - dy * sin(angle)).roundToLong(),
-            (center.second + dx * sin(angle) + dy * cos(angle)).roundToLong(),
-            camera0.third
-        )
+        val angle = Math.toRadians((System.currentTimeMillis()-startAt) / 50.0)
+        val camera = rotateCamera(angle, sqrt(angle))
 
         state.groups.forEach { (index, group) ->
             g.color = lastColor.shifted(index * -1.0f / count)
@@ -145,6 +141,32 @@ class Day8Video(val boundingMin: Pos3, val boundingMax: Pos3, val count: Int) {
             g.drawLine(pos1.first.toInt(), pos1.second.toInt(), pos2.first.toInt(), pos2.second.toInt())
         }
 
+    }
+
+    private fun rotateCamera(angleXY: Double, angleYZ: Double = 0.0): Pos3 {
+        var dx = camera0.first - center.first.toDouble()
+        var dy = camera0.second - center.second.toDouble()
+        var dz = camera0.third - center.third.toDouble()
+
+        val cosXY = cos(angleXY)
+        val sinXY = sin(angleXY)
+        val newDx = dx * cosXY - dy * sinXY
+        val newDy = dx * sinXY + dy * cosXY
+        dx = newDx
+        dy = newDy
+
+        val cosYZ = cos(angleYZ)
+        val sinYZ = sin(angleYZ)
+        val newDy2 = dy * cosYZ - dz * sinYZ
+        val newDz = dy * sinYZ + dz * cosYZ
+        dy = newDy2
+        dz = newDz
+
+        return Pos3(
+            center.first + dx.toLong(),
+            center.second + dy.toLong(),
+            center.third + dz.toLong(),
+        )
     }
 
 }
