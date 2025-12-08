@@ -1,7 +1,6 @@
 package aoc2025.day8
 
 import catching
-import debug
 import go
 import eventAndDayFromPackage
 import provideInput
@@ -39,44 +38,48 @@ fun main() = catching {
     go("part 2", 9617397716) { part2(input) }
 }
 
-typealias Box = Triple<Long, Long, Long>
-typealias Connection = Triple<Box, Box, Long>
+typealias Pos3 = Triple<Long, Long, Long>
 
-operator fun Box.compareTo(other: Box) = compareValuesBy(this, other, Box::first, Box::second, Box::third)
-
-fun Box.distanceTo(other: Box) = (this.first - other.first) * (this.first - other.first) +
+fun Pos3.distanceTo(other: Pos3) = (this.first - other.first) * (this.first - other.first) +
         (this.second - other.second) * (this.second - other.second) +
         (this.third - other.third) * (this.third - other.third)
 
-fun solve(data: String, op: (boxes: List<Box>, connections: List<Connection>, uf: UnionFind<Box>) -> Any): Any {
+fun prepare(data: String): Triple<List<Pos3>, List<Pair<Pos3, Pos3>>, UnionFind<Pos3>> {
     val boxes = data.reader().readLines()
-        .map { it.split(",") }.map { (x, y, z) -> Box(x.toLong(), y.toLong(), z.toLong()) }
+        .map { it.split(",") }.map { (x, y, z) -> Pos3(x.toLong(), y.toLong(), z.toLong()) }
 
-    val connections = boxes.flatMap { b1 -> boxes.map { b2 -> Connection(b1, b2, b1.distanceTo(b2)) } }
-        .filter { it.first < it.second }
-        .sortedBy { it.third }
+    val connections = boxes.flatMapIndexed { i, b1 -> boxes.subList(0, i).map { b2 -> b1 to b2 } }
+        .sortedBy { (b1, b2) -> b1.distanceTo(b2) }.drop(1)
 
     val indices = boxes.withIndex().associate { (i, triple) -> triple to i }
+    val uf = UnionFind<Pos3>(boxes.size) { indices[it]!! }
 
-    val uf = UnionFind<Box>(boxes.size) { indices[it]!! }
-
-    return op(boxes, connections, uf)
+    return Triple(boxes, connections, uf)
 }
 
-fun part1(data: String, conns: Int = 1000) = solve(data) { boxes, connections, uf ->
-    connections.take(conns).forEach { (b1, b2, _) -> uf.union(b1, b2) }
-    boxes.groupBy { uf.find(it) }
+fun part1(data: String, conns: Int = 1000): Any {
+    val (boxes: List<Pos3>, connections: List<Pair<Pos3, Pos3>>, uf: UnionFind<Pos3>) = prepare(data)
+
+    connections.take(conns).forEach { (b1, b2) -> uf.union(b1, b2) }
+    return boxes.groupBy { uf.find(it) }
         .map { it.value.size }
         .sortedDescending().take(3).reduce(Int::times)
 }
 
-fun part2(data: String) = solve(data) { boxes, connections, uf ->
-    connections.forEach {(b1, b2, _)->
-        uf.union(b1, b2)
-        val p1 = uf.find(b1)
-        if (boxes.all { uf.find(it) == p1 }) return@solve b1.first * b2.first
+fun part2(data: String): Any {
+    val (boxes: List<Pos3>, connections: List<Pair<Pos3, Pos3>>, uf: UnionFind<Pos3>) = prepare(data)
+
+    var added = 0
+    connections.forEach { (b1, b2) ->
+        val r1 = uf.find(b1)
+        val r2 = uf.find(b2)
+        if (r1 != r2) { // kruskal
+            uf.union(b1, b2)
+            added++
+            if (added == boxes.size - 1) return b1.first * b2.first
+        }
     }
-    error("should not be reached")
+    error("not gonna happen")
 }
 
 class UnionFind<T>(size: Int, val indexOp: (T) -> Int) {
