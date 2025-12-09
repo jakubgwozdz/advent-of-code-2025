@@ -1,6 +1,7 @@
 package aoc2025.day9
 
 import catching
+import debug
 import eventAndDayFromPackage
 import go
 import helpers.Pos
@@ -10,8 +11,6 @@ import helpers.row
 import helpers.x
 import helpers.y
 import provideInput
-import kotlin.math.max
-import kotlin.math.min
 
 fun main() = catching {
     val (event, day) = eventAndDayFromPackage { }
@@ -52,18 +51,32 @@ data class Rect(
 )
 
 fun part2(data: String): Any {
+
+    // vertices
     val reds = data.reader().readLines().map { it.split(",").let { (a, b) -> Pos(a.toInt(), b.toInt()) } }
+
+    // edges, normalized (lesser..greater)
     val greens = (reds.zipWithNext() + (reds.last() to reds.first())).map { (p1, p2) ->
         if (p1.x == p2.x) (p1.x..p1.x) to (p1.y.coerceAtMost(p2.y)..p1.y.coerceAtLeast(p2.y))
         else if (p1.y == p2.y) (p1.x.coerceAtMost(p2.x)..p1.x.coerceAtLeast(p2.x)) to (p1.y..p1.y)
         else error("impossible")
     }
 
+    // horizontal lines (y to x1..x2)
     val hLines = greens.filter { (p1, p2) -> p1.first != p1.last }
         .map { (xs, ys) -> ys.single() to xs }
+        .sortedBy { it.first }
 
+    // vertical lines (x to y1..y2)
     val vLines = greens.filter { (p1, p2) -> p1.first == p1.last }
         .map { (xs, ys) -> xs.single() to ys }
+        .sortedBy { it.first }
+
+    val interestingXs = buildSet { reds.forEach { add(it.x); add(it.x - 1); add(it.x + 1) } }
+    val interestingYs = buildSet { reds.forEach { add(it.y); add(it.y - 1); add(it.y + 1) } }
+
+    val hLinesFiltered = interestingXs.associateWith { x -> hLines.filterByRanges(x) }
+    val vLinesFiltered = interestingYs.associateWith { y -> vLines.filterByRanges(y) }
 
     val rects = reds.flatMapIndexed { i, p1 ->
         val (x1, y1) = p1
@@ -75,24 +88,31 @@ fun part2(data: String): Any {
         }
     }.filter { (p1, p2) -> p1.x != p2.x && p1.y != p2.y }
 
-    return rects.filter { rect ->
-        val minX = rect.p1.x + 1
-        val minY = rect.p1.y + 1
-        val maxX = rect.p2.x - 1
-        val maxY = rect.p2.y - 1
+    var best = 0L
+    var tested = 0
 
-        if (!valid(hLines, minX, minY, maxY)) return@filter false
-        if (!valid(hLines, maxX, minY, maxY)) return@filter false
-        if (!valid(vLines, minY, minX, maxX)) return@filter false
-        if (!valid(vLines, maxY, minX, maxX)) return@filter false
+     rects.forEach { rect ->
+         if (rect.size > best) {
+             tested++
+             val minX = rect.p1.x + 1
+             val minY = rect.p1.y + 1
+             val maxX = rect.p2.x - 1
+             val maxY = rect.p2.y - 1
 
-        true
-    }.maxOf { it.size }
+             if (inside(minY, maxY, hLinesFiltered[minX]!!) &&
+                     inside(minX, maxX, vLinesFiltered[minY]!!) &&
+                     inside(minY, maxY, hLinesFiltered[maxX]!!) &&
+                     inside(minX, maxX, vLinesFiltered[maxY]!!)) best = rect.size
+         }
+    }
+    tested.debug()
+
+    return best
 }
 
-private fun valid(lines: List<Pair<Int, IntRange>>, main: Int, otherMin: Int, otherMax: Int): Boolean {
-    val filtered = lines.filter { (_, range) -> range.first < main && main < range.last }
-    val countMinY1 = filtered.count { (r, _) -> r < otherMin }
-    val countMaxY1 = filtered.count { (r, _) -> r < otherMax }
-    return countMinY1 % 2 == 1 && countMaxY1 == countMinY1
+private fun <V> inside(min: Int, max: Int, filtered: List<Pair<Int, V>>): Boolean {
+    val countMin = filtered.binarySearchBy(min) { it.first }.let { if (it < 0) -it - 1 else it }
+    return countMin % 2 == 1 && max < filtered[countMin].first
 }
+
+private fun <K> List<Pair<K, IntRange>>.filterByRanges(v: Int): List<Pair<K, IntRange>> = filter { (_, range) -> range.first < v && v < range.last }
