@@ -91,20 +91,20 @@ fun part2(data: String): Any {
     var best = 0L
     var tested = 0
 
-     rects.forEach { rect ->
-         if (rect.size > best) {
-             tested++
-             val minX = rect.p1.x + 1
-             val minY = rect.p1.y + 1
-             val maxX = rect.p2.x - 1
-             val maxY = rect.p2.y - 1
+    best = rects.sortedByDescending { rect -> rect.size }
+        .first { rect ->
+            tested++
+            val minX = rect.p1.x + 1
+            val minY = rect.p1.y + 1
+            val maxX = rect.p2.x - 1
+            val maxY = rect.p2.y - 1
 
-             if (inside(minY, maxY, hLinesFiltered[minX]!!) &&
-                     inside(minX, maxX, vLinesFiltered[minY]!!) &&
-                     inside(minY, maxY, hLinesFiltered[maxX]!!) &&
-                     inside(minX, maxX, vLinesFiltered[maxY]!!)) best = rect.size
-         }
-    }
+            (inside(minY, maxY, hLinesFiltered[minX]!!) &&
+                inside(minX, maxX, vLinesFiltered[minY]!!) &&
+                inside(minY, maxY, hLinesFiltered[maxX]!!) &&
+                inside(minX, maxX, vLinesFiltered[maxY]!!)
+            )
+        }.size
     tested.debug()
 
     return best
@@ -115,4 +115,5 @@ private fun <V> inside(min: Int, max: Int, filtered: List<Pair<Int, V>>): Boolea
     return countMin % 2 == 1 && max < filtered[countMin].first
 }
 
-private fun <K> List<Pair<K, IntRange>>.filterByRanges(v: Int): List<Pair<K, IntRange>> = filter { (_, range) -> range.first < v && v < range.last }
+private fun <K> List<Pair<K, IntRange>>.filterByRanges(v: Int): List<Pair<K, IntRange>> =
+    filter { (_, range) -> range.first < v && v < range.last }
