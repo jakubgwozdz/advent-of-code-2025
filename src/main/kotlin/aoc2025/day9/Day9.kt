@@ -1,7 +1,6 @@
 package aoc2025.day9
 
 import catching
-import debug
 import eventAndDayFromPackage
 import go
 import helpers.Pos
@@ -57,7 +56,12 @@ data class Rect(
 fun part2(data: String): Any {
     val reds = data.reader().readLines().map { it.split(",").let { (a, b) -> Pos(a.toInt(), b.toInt()) } }
     val (hLines, vLines) = (reds.zipWithNext() + (reds.last() to reds.first()))
-        .partition { (p1, p2) -> p1.x != p2.x }
+        .map { (p1, p2) ->
+            if (p1.x == p2.x) (p1.x .. p1.x) to (p1.y.coerceAtMost(p2.y)..p1.y.coerceAtLeast(p2.y))
+            else if (p1.y == p2.y) (p1.x.coerceAtMost(p2.x) .. p1.x.coerceAtLeast(p2.x)) to (p1.y .. p1.y)
+            else error("impossible")
+        }
+        .partition { (p1, p2) -> p1.first != p1.last }
 
     val rects = reds.flatMapIndexed { i, p1 ->
         val (x1, y1) = p1
@@ -70,22 +74,31 @@ fun part2(data: String): Any {
     }.filter { (p1, p2) -> p1.x != p2.x && p1.y != p2.y }
 
     return rects.filter { rect ->
-        reds.none { (x, y) -> x in rect.xInside && y in rect.yInside }
-    }.filter { rect ->
         val minX = min(rect.p1.x, rect.p2.x) + 1
-        val maxX = max(rect.p1.x, rect.p2.x) - 1
         val minY = min(rect.p1.y, rect.p2.y) + 1
+        val maxX = max(rect.p1.x, rect.p2.x) - 1
         val maxY = max(rect.p1.y, rect.p2.y) - 1
-        val hBorders = hLines.filter { (p1, p2) ->
-            minX > p1.x.coerceAtMost(p2.x) && minX < p1.x.coerceAtLeast(p2.x)
-        }
-        val vBorders = vLines.filter { (p1, p2) ->
-            minY > p1.y.coerceAtMost(p2.y) && minY < p1.y.coerceAtLeast(p2.y)
-        }
-        val countMinX = vBorders.count { (p1) -> p1.x < minX }
-        val countMaxX = vBorders.count { (p1) -> p1.x < maxX }
-        val countMinY = hBorders.count { (p1) -> p1.y < minY }
-        val countMaxY = hBorders.count { (p1) -> p1.y < maxY }
-        countMinX % 2 == 1 && countMaxX == countMinX && countMinY % 2 == 1 && countMaxY == countMinY
+
+        val hBorders1 = hLines.filter { (range, _) -> range.first < minX && minX < range.last }
+        val countMinY1 = hBorders1.count { (_, range) -> range.first < minY }
+        val countMaxY1 = hBorders1.count { (_, range) -> range.first < maxY }
+        if (countMinY1 % 2 != 1 || countMaxY1 != countMinY1) return@filter false
+
+        val hBorders2 = hLines.filter { (range, _) -> range.first < maxX && maxX < range.last }
+        val countMinY2 = hBorders2.count { (_, range) -> range.first < minY }
+        val countMaxY2 = hBorders2.count { (_, range) -> range.first < maxY }
+        if (countMinY2 % 2 != 1 || countMaxY2 != countMinY2) return@filter false
+
+        val vBorders1 = vLines.filter { (_, range) -> range.first < minY && minY < range.last }
+        val countMinX1 = vBorders1.count { (range, _) -> range.first < minX }
+        val countMaxX1 = vBorders1.count { (range, _) -> range.first < maxX }
+        if (countMinX1 % 2 != 1 || countMaxX1 != countMinX1) return@filter false
+
+        val vBorders2 = vLines.filter { (_, range) -> range.first < maxY && maxY < range.last }
+        val countMinX2 = vBorders2.count { (range, _) -> range.first < minX }
+        val countMaxX2 = vBorders2.count { (range, _) -> range.first < maxX }
+        if (countMinX2 % 2 != 1 || countMaxX2 != countMinX2) return@filter false
+
+        true
     }.maxOf { it.size }
 }
