@@ -58,34 +58,21 @@ else first().indices.firstNotNullOfOrNull { i ->
 data class State(val toGo: List<Int>, val buttons: Buttons, val steps: Int) {
     val remainingSum: Int = toGo.sum()
     override fun toString(): String = buildString {
-        appendLine("remaining sum: $remainingSum")
+        appendLine("remaining sum: $remainingSum at step $steps")
         appendLine(toGo.joinToString(" ") { it.toString().padStart(2) })
         buttons.forEach { appendLine(it.buttonsToString()) }
     }.trim()
 
-    fun reduceSingles(): State {
-        var s1 = this
-        while (true) {
-            val single = s1.buttons.possibleSingle()
-//                .debug { "single switch button: $it" }
-            if (single == null) return s1
-            val (i, button) = single
-            val times = s1.toGo[i]
-            val nextToGo = s1.toGo.discharge(button, times)
-            s1 = State(
-                nextToGo,
-                s1.buttons.filtered(nextToGo),
-                s1.steps + times
+    fun isValid() = toGo.filterIndexed { index, v -> v < 0 || v > 0 && buttons.none { it[index] } }.isEmpty()
+
+    fun normalize() = toGo.indices.filter { index -> toGo[index] == 0 && buttons.none { it[index] } }
+        .takeIf { it.isNotEmpty() }?.let {
+            copy(
+                toGo = toGo.filterIndexed { index, _ -> index !in it },
+                buttons = buttons.map { button -> button.filterIndexed { index, _ -> index !in it } }
             )
-//                .debug { "after pressing [${button.buttonsToString()}] $i times: $it" }
-        }
-    }
+        } ?: this
 
-    //    fun reduceImpossible(): State {
-//        if (toGo.none { it == 0 })
-//    }
-
-//    fun reduceDoubles
 }
 
 private fun Buttons.filtered(nextToGo: List<Int>): List<Button> = filter { b ->
@@ -95,6 +82,9 @@ private fun Buttons.filtered(nextToGo: List<Int>): List<Button> = filter { b ->
 private fun Button.buttonsToString(): String = joinToString(" ") { if (it) " #" else " ." }
 
 fun part2(data: String) = parse(data).sumOf { machine ->
+
+    return@sumOf solveIntegerSystem(machine.buttons, machine.requirements).debug()!!.sum().toInt()
+
     val state = State(machine.requirements, machine.buttons, 0)
         .debug { "initial state: $it" }
 
@@ -113,39 +103,71 @@ fun part2(data: String) = parse(data).sumOf { machine ->
 //        heuristics =  { state -> state.remainingSum },
         priority = compareBy(Pair<State, Int>::second).thenComparingInt { it.first.remainingSum },
     ) { (toGo, buttons, steps) ->
-        (buttons.filtered(toGo).takeIf { it != buttons }?.let { listOf(State(toGo, it, steps) to 0) }
-            ?: buttons.possibleSingle()?.let { (i, b) ->
-                val times = toGo[i]
-                val nextToGo = toGo.discharge(b, times)
-                val nextButtons = buttons.filtered(nextToGo)
-                listOf(State(nextToGo, nextButtons, steps + times) to times)
+        (/*buttons.filtered(toGo).takeIf { it != buttons }
+            ?.let {
+                State(toGo, it, steps).debug { "reduced buttons: $it" }
+                listOf(State(toGo, it, steps) to 0)
             }
-            ?: buttons.possibleCouple()?.let { (i, b1, b2) ->
-                val times = toGo[i]
-                (0..times).map { times1 ->
-                    val times2 = times - times1
-                    val nextToGo = toGo.discharge(b1, times1).discharge(b2, times2)
-                    val nextButtons = buttons.filtered(nextToGo)
-                    State(nextToGo, nextButtons, steps + times) to times
+            ?: */buttons.possibleSingle()?.let { (i, b) ->
+//                State(toGo, buttons, steps).debug { "found single on $i: $it" }
+            val times = toGo[i]
+            val nextToGo = toGo.discharge(b, times)
+            val nextButtons = buttons.filtered(nextToGo)
+            listOf(State(nextToGo, nextButtons, steps + times).normalize() to times)
+        }
+//            ?: buttons.possibleCouple()?.let { (i, b1, b2) ->
+////                State(toGo, buttons, steps).debug { "found couples on $i: $it" }
+//                val times = toGo[i]
+//                (0..times).map { times1 ->
+//                    val times2 = times - times1
+//                    val nextToGo = toGo.discharge(b1, times1).discharge(b2, times2)
+//                    val nextButtons = buttons.filtered(nextToGo)
+//                    State(nextToGo, nextButtons, steps + times) to times
+//                }
+//            }
+            ?: toGo.withIndex().minBy { buttons.count { b -> b[it.index] }.let { if (it == 0) 100 else it } }
+                .let { (i, times) ->
+                    State(toGo, buttons, steps).debug { "will try split on $i: $it" }
+                    val btns = buttons.filter { it[i] }
+//                    .debug { "buttons to split: ${it.map { it.buttonsToString() }}" }
+                    generateDistributions(times, btns.size)
+                        .map { v ->
+                            val nextToGo = v.zip(btns).fold(toGo) { acc, (v, b) -> acc.discharge(b, v) }
+                            val nextButtons = (buttons - btns).filtered(nextToGo)
+                            State(nextToGo, nextButtons, steps + times).normalize() to times
+                        }
+//                        .filter { (state) -> state.isValid() }
+                        .toList()
+                        .debug { "generated states: ${it.count()}" }
                 }
-                    .filter { (state) -> state.toGo.all { it >= 0 } }
-
-            }
-//            ?:emptyList()
-//            ?:error("no possible couple")
-            ?: buttons.map { button ->
-                val nextToGo = toGo.discharge(button)
-                val nextButtons = buttons.filtered(nextToGo)
-                State(nextToGo, nextButtons, steps + 1) to 1
-            })
-            .filterNot { (state) -> state.toGo in visited }
-            .onEach { (state) -> visited.add(state.toGo) }
+//            ?: buttons.map { button ->
+//                val nextToGo = toGo.discharge(button)
+//                val nextButtons = buttons.filtered(nextToGo)
+//                State(nextToGo, nextButtons, steps + 1) to 1
+//            }
+                )
+            .filter { (state) -> state.isValid() }
+//            .filterNot { (state) -> state.toGo in visited }
+//            .onEach { (state) -> visited.add(state.toGo) }
     }
 
     result
         .debug { "result: $it" }
 }
 
+fun generateDistributions(total: Int, n: Int): Sequence<List<Int>> = when {
+    n == 1 -> sequenceOf(listOf(total))
+    n <= 0 -> emptySequence()
+    else -> sequence {
+        for (i in 0..total) {
+            val remainingSum = total - i
+            val subDistributions = generateDistributions(remainingSum, n - 1)
+            for (sub in subDistributions) {
+                yield((listOf(i) + sub))
+            }
+        }
+    }
+}
 
 private fun parse(data: String): List<Machine> = data.reader().readLines().map { line ->
     val splits = line.split(" ").filter { it.isNotBlank() }
@@ -153,9 +175,101 @@ private fun parse(data: String): List<Machine> = data.reader().readLines().map {
     val buttons = splits.drop(1).dropLast(1).map { w ->
         val indices = w.drop(1).dropLast(1).split(",").map { it.toInt() }
         List(lights.size) { it in indices }
-    }
+    }.sortedBy { it.buttonsToString() }
     val requirements = splits.last().drop(1).dropLast(1).split(",").map { it.toInt() }
     Machine(lights, buttons, requirements)
-//        .debug { "$data parsed to $it" }
 }
 
+fun solveIntegerSystem(buttons: Buttons, requirements: List<Int>): List<Int> {
+    val indexedButtons = buttons.mapIndexed { index, vals -> index to vals }
+    val currentSolution = IntArray(buttons.size)
+
+    val context = SearchContext(
+        minTotalMoves = Int.MAX_VALUE,
+        bestSolution = null
+    )
+
+    solveBranchAndBound(indexedButtons, requirements, currentSolution, 0, context)
+
+    return context.bestSolution ?: error("no solution found")
+}
+
+private class SearchContext(
+    var minTotalMoves: Int,
+    var bestSolution: List<Int>?
+)
+
+private fun solveBranchAndBound(
+    availableButtons: List<Pair<Int, Button>>,
+    currentReqs: List<Int>,
+    solutionAcc: IntArray,
+    currentSum: Int,
+    ctx: SearchContext
+) {
+    if (currentSum >= ctx.minTotalMoves) return
+
+    if (currentReqs.all { it == 0 }) {
+        ctx.minTotalMoves = currentSum
+        ctx.bestSolution = solutionAcc.toList() // Kopia tablicy
+        return
+    }
+
+    if (currentReqs.any { it < 0 }) return
+    if (availableButtons.isEmpty()) return
+
+    var bestRow = -1
+    var minContributors = Int.MAX_VALUE
+
+    for (row in currentReqs.indices) {
+        if (currentReqs[row] > 0) {
+            val count = availableButtons.count { it.second[row] }
+            if (count == 0) return
+            if (count < minContributors) {
+                minContributors = count
+                bestRow = row
+            }
+            if (minContributors == 1) break
+        }
+    }
+
+    if (minContributors == 1) {
+        val (btnIdx, btnMask) = availableButtons.first { it.second[bestRow] }
+        val needed = currentReqs[bestRow]
+
+        if (currentSum + needed >= ctx.minTotalMoves) return
+
+        solutionAcc[btnIdx] += needed
+        val nextReqs = currentReqs.mapIndexed { i, v -> if (btnMask[i]) v - needed else v }
+
+        solveBranchAndBound(
+            availableButtons.filter { it.first != btnIdx },
+            nextReqs,
+            solutionAcc,
+            currentSum + needed,
+            ctx
+        )
+
+        solutionAcc[btnIdx] -= needed
+
+    } else {
+        val (btnIdx, btnMask) = availableButtons.first { it.second[bestRow] }
+        val maxUsage = currentReqs[bestRow]
+
+        for (usage in maxUsage downTo 0) {
+            if (currentSum + usage >= ctx.minTotalMoves) continue
+
+            solutionAcc[btnIdx] += usage
+            val nextReqs = currentReqs.mapIndexed { i, v -> if (btnMask[i]) v - usage else v }
+
+            solveBranchAndBound(
+                availableButtons.filter { it.first != btnIdx },
+                nextReqs,
+                solutionAcc,
+                currentSum + usage,
+                ctx
+            )
+
+            solutionAcc[btnIdx] -= usage
+        }
+    }
+}
