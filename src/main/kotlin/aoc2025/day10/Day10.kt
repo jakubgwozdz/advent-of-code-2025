@@ -41,29 +41,83 @@ fun part1(data: String): Any = parse(data).sumOf { machine ->
     }
 }
 
-fun List<Int>.press(b: Button) = mapIndexed { index, v -> if (b[index]) v - 1 else v }
+fun List<Int>.discharge(b: Button, times: Int = 1) = mapIndexed { index, v -> if (b[index]) v - times else v }
+
+fun Buttons.possibleSingle() = if (isEmpty()) null
+else first().indices.firstNotNullOfOrNull { i -> singleOrNull { it[i] }?.let { i to it } }
+
+fun Buttons.possibleCouples() = if (size < 2) emptyList()
+else first().indices.mapNotNull { i ->
+    val bs = filter { it[i] }
+    if (bs.size != 2) null else {
+        val (b1, b2) = bs
+        Triple(i, b1, b2)
+    }
+}
+
+data class State(val toGo: List<Int>, val buttons: Buttons, val steps: Int) {
+    val remainingSum: Int = toGo.sum()
+    override fun toString(): String = buildString {
+        appendLine("remaining sum: $remainingSum")
+        appendLine(toGo.joinToString(" ") { it.toString().padStart(2) })
+        buttons.forEach { appendLine(it.buttonsToString()) }
+    }.trim()
+
+    fun reduceSingles(): State {
+        var s1 = this
+        while (true) {
+            val single = s1.buttons.possibleSingle()
+                .debug { "single switch button: $it" }
+            if (single == null) return s1
+            val (i, button) = single
+            s1 = State(
+                s1.toGo.discharge(button, s1.toGo[i]),
+                s1.buttons.filterNot { it == button },
+                s1.steps + s1.toGo[i]
+            ).debug { "after pressing [${button.buttonsToString()}] $i times: $it" }
+        }
+    }
+}
+
+private fun Button.buttonsToString(): String = joinToString(" ") { if (it) " #" else " ." }
 
 fun part2(data: String) = parse(data).sumOf { machine ->
     machine.debug()
-    data class State(val toGo: List<Int>, val buttons: Buttons, val remainingSum: Int = toGo.sum())
 
+    var state = State(machine.requirements, machine.buttons, 0)
+        .debug { "initial state: $it" }
+
+
+
+
+
+    while (true) {
+        val prevSum = state.remainingSum
+        val prevState = state
+        state = state.reduceSingles()
+        if (prevState == state) break
+    }
+
+    var result = state.steps
     val visited = mutableSetOf<List<Int>>()
-    dijkstra(
-        start = State(machine.requirements, machine.buttons),
+    result += dijkstra(
+        start = state,
         endPredicate = { state -> state.toGo.all { it == 0 } },
 //        heuristics =  { state -> state.remainingSum },
         priority = compareBy(Pair<State, Int>::second).thenComparingInt { it.first.remainingSum },
-    ) { (toGo, buttons) ->
+    ) { (toGo, buttons, steps) ->
         buttons.map { button ->
-            val nextToGo = toGo.press(button)
-            val nextButtons = buttons.filter { b -> nextToGo.press(b).all { it >= 0 } }
-            State(nextToGo, nextButtons) to 1
+            val nextToGo = toGo.discharge(button)
+            val nextButtons = buttons.filter { b -> nextToGo.discharge(b).all { it >= 0 } }
+            State(nextToGo, nextButtons, steps+1) to 1
         }
             .filterNot { (state) -> state.toGo in visited }
             .onEach { (state) -> visited.add(state.toGo) }
 //            .onEach { (l, _) -> check(l.first.all { it >= 0 }) }
 //            .filter { (l, _) -> l.first.all { it >= 0 } }
     }
+
+    result
         .debug { "result: $it" }
 }
 
