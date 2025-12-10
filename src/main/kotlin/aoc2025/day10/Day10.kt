@@ -4,6 +4,7 @@ import catching
 import debug
 import go
 import eventAndDayFromPackage
+import helpers.search.astar
 import helpers.search.dijkstra
 import provideInput
 
@@ -22,8 +23,10 @@ fun main() = catching {
 }
 
 typealias Lights = Set<Int>
+typealias Button = Set<Int>
+typealias Buttons = List<Button>
 
-data class Machine(val lights: Lights, val buttons: List<Set<Int>>, val requirements: List<Int>)
+data class Machine(val lights: Lights, val buttons: Buttons, val requirements: List<Int>)
 
 fun part1(data: String): Any = parse(data).sumOf { machine ->
     dijkstra(
@@ -38,16 +41,27 @@ fun part1(data: String): Any = parse(data).sumOf { machine ->
 }
 
 fun part2(data: String) = parse(data).sumOf { machine ->
-    val t = machine.requirements//.mapIndexed { index, i -> if (index in machine.lights) i else 0 }
+    machine.debug()
+    data class State(val toGo: List<Int>, val buttons: Buttons, val remainingSum: Int = toGo.sum())
+
+    val visited = mutableSetOf<List<Int>>()
     dijkstra(
-        start = t,
-        endPredicate = { it.all { it == 0 } },
-        priority = compareBy<Pair<List<Int>, Int>> { it.second }.thenComparingInt { it.first.sum() },
-    ) { lights ->
-        machine.buttons.map { l ->
-            lights.mapIndexed { index, i -> if (index in l) i - 1 else i } to 1
-        }.filter { (l, _) -> l.all { it >= 0 } }
-    }.debug { "$it for $machine" }
+        start = State(machine.requirements, machine.buttons),
+        endPredicate = { state -> state.toGo.all { it == 0 } },
+//        heuristics =  { state -> state.remainingSum },
+        priority = compareBy(Pair<State, Int>::second).thenComparingInt { it.first.remainingSum },
+    ) { (toGo, buttons) ->
+        buttons.map { button ->
+            val nextToGo = toGo.mapIndexed { index, i -> if (index in button) i - 1 else i }
+            val nextButtons = buttons.filter { l -> l.all { nextToGo[it] > 0 } }
+            State(nextToGo, nextButtons) to 1
+        }
+            .filterNot { (state) -> state.toGo in visited }
+            .onEach { (state) -> visited.add(state.toGo) }
+//            .onEach { (l, _) -> check(l.first.all { it >= 0 }) }
+//            .filter { (l, _) -> l.first.all { it >= 0 } }
+    }
+        .debug { "result: $it" }
 }
 
 
