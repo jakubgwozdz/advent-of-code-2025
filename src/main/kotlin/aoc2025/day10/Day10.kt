@@ -46,8 +46,8 @@ fun List<Int>.discharge(b: Button, times: Int = 1) = mapIndexed { index, v -> if
 fun Buttons.possibleSingle() = if (isEmpty()) null
 else first().indices.firstNotNullOfOrNull { i -> singleOrNull { it[i] }?.let { i to it } }
 
-fun Buttons.possibleCouples() = if (size < 2) emptyList()
-else first().indices.mapNotNull { i ->
+fun Buttons.possibleCouple() = if (size < 2) null
+else first().indices.firstNotNullOfOrNull { i ->
     val bs = filter { it[i] }
     if (bs.size != 2) null else {
         val (b1, b2) = bs
@@ -67,37 +67,44 @@ data class State(val toGo: List<Int>, val buttons: Buttons, val steps: Int) {
         var s1 = this
         while (true) {
             val single = s1.buttons.possibleSingle()
-                .debug { "single switch button: $it" }
+//                .debug { "single switch button: $it" }
             if (single == null) return s1
             val (i, button) = single
+            val times = s1.toGo[i]
+            val nextToGo = s1.toGo.discharge(button, times)
             s1 = State(
-                s1.toGo.discharge(button, s1.toGo[i]),
-                s1.buttons.filterNot { it == button },
-                s1.steps + s1.toGo[i]
-            ).debug { "after pressing [${button.buttonsToString()}] $i times: $it" }
+                nextToGo,
+                s1.buttons.filtered(nextToGo),
+                s1.steps + times
+            )
+//                .debug { "after pressing [${button.buttonsToString()}] $i times: $it" }
         }
     }
+
+    //    fun reduceImpossible(): State {
+//        if (toGo.none { it == 0 })
+//    }
+
+//    fun reduceDoubles
+}
+
+private fun Buttons.filtered(nextToGo: List<Int>): List<Button> = filter { b ->
+    b.zip(nextToGo).all { (a, v) -> !a || v > 0 }
 }
 
 private fun Button.buttonsToString(): String = joinToString(" ") { if (it) " #" else " ." }
 
 fun part2(data: String) = parse(data).sumOf { machine ->
-    machine.debug()
-
-    var state = State(machine.requirements, machine.buttons, 0)
+    val state = State(machine.requirements, machine.buttons, 0)
         .debug { "initial state: $it" }
 
-
-
-
-
-    while (true) {
-        val prevSum = state.remainingSum
-        val prevState = state
-        state = state.reduceSingles()
-        if (prevState == state) break
-    }
-
+//    while (true) {
+//        val prevSum = state.remainingSum
+//        val prevState = state
+//        state = state.reduceSingles()
+//        if (prevState == state) break
+//    }
+//
     var result = state.steps
     val visited = mutableSetOf<List<Int>>()
     result += dijkstra(
@@ -106,15 +113,33 @@ fun part2(data: String) = parse(data).sumOf { machine ->
 //        heuristics =  { state -> state.remainingSum },
         priority = compareBy(Pair<State, Int>::second).thenComparingInt { it.first.remainingSum },
     ) { (toGo, buttons, steps) ->
-        buttons.map { button ->
-            val nextToGo = toGo.discharge(button)
-            val nextButtons = buttons.filter { b -> nextToGo.discharge(b).all { it >= 0 } }
-            State(nextToGo, nextButtons, steps+1) to 1
-        }
+        (buttons.filtered(toGo).takeIf { it != buttons }?.let { listOf(State(toGo, it, steps) to 0) }
+            ?: buttons.possibleSingle()?.let { (i, b) ->
+                val times = toGo[i]
+                val nextToGo = toGo.discharge(b, times)
+                val nextButtons = buttons.filtered(nextToGo)
+                listOf(State(nextToGo, nextButtons, steps + times) to times)
+            }
+            ?: buttons.possibleCouple()?.let { (i, b1, b2) ->
+                val times = toGo[i]
+                (0..times).map { times1 ->
+                    val times2 = times - times1
+                    val nextToGo = toGo.discharge(b1, times1).discharge(b2, times2)
+                    val nextButtons = buttons.filtered(nextToGo)
+                    State(nextToGo, nextButtons, steps + times) to times
+                }
+                    .filter { (state) -> state.toGo.all { it >= 0 } }
+
+            }
+//            ?:emptyList()
+//            ?:error("no possible couple")
+            ?: buttons.map { button ->
+                val nextToGo = toGo.discharge(button)
+                val nextButtons = buttons.filtered(nextToGo)
+                State(nextToGo, nextButtons, steps + 1) to 1
+            })
             .filterNot { (state) -> state.toGo in visited }
             .onEach { (state) -> visited.add(state.toGo) }
-//            .onEach { (l, _) -> check(l.first.all { it >= 0 }) }
-//            .filter { (l, _) -> l.first.all { it >= 0 } }
     }
 
     result
