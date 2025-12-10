@@ -4,7 +4,6 @@ import catching
 import debug
 import go
 import eventAndDayFromPackage
-import helpers.search.astar
 import helpers.search.dijkstra
 import provideInput
 
@@ -22,23 +21,27 @@ fun main() = catching {
     go("part 2") { part2(input) }
 }
 
-typealias Lights = Set<Int>
-typealias Button = Set<Int>
+typealias Lights = List<Boolean>
+typealias Button = List<Boolean>
 typealias Buttons = List<Button>
 
 data class Machine(val lights: Lights, val buttons: Buttons, val requirements: List<Int>)
 
 fun part1(data: String): Any = parse(data).sumOf { machine ->
     dijkstra(
-        start = emptySet(),
+        start = List(machine.lights.size) { false },
         endPredicate = { it == machine.lights },
-        priority = compareBy<Pair<Lights, Int>> { it.second }.thenComparingInt { (it.first - machine.lights).size + (machine.lights - it.first).size },
+        priority = compareBy<Pair<Lights, Int>> { it.second }.thenComparingInt { (lights) ->
+            lights.zip(machine.lights).count { (a, b) -> a != b }
+        },
     ) { lights ->
-        machine.buttons.map { l ->
-            buildSet { addAll(lights); l.forEach { if (it in this) remove(it) else add(it) } } to 1
+        machine.buttons.map { button ->
+            lights.mapIndexed { i, b -> if (button[i]) !b else b } to 1
         }
     }
 }
+
+fun List<Int>.press(b: Button) = mapIndexed { index, v -> if (b[index]) v - 1 else v }
 
 fun part2(data: String) = parse(data).sumOf { machine ->
     machine.debug()
@@ -52,8 +55,8 @@ fun part2(data: String) = parse(data).sumOf { machine ->
         priority = compareBy(Pair<State, Int>::second).thenComparingInt { it.first.remainingSum },
     ) { (toGo, buttons) ->
         buttons.map { button ->
-            val nextToGo = toGo.mapIndexed { index, i -> if (index in button) i - 1 else i }
-            val nextButtons = buttons.filter { l -> l.all { nextToGo[it] > 0 } }
+            val nextToGo = toGo.press(button)
+            val nextButtons = buttons.filter { b -> nextToGo.press(b).all { it >= 0 } }
             State(nextToGo, nextButtons) to 1
         }
             .filterNot { (state) -> state.toGo in visited }
@@ -67,11 +70,13 @@ fun part2(data: String) = parse(data).sumOf { machine ->
 
 private fun parse(data: String): List<Machine> = data.reader().readLines().map { line ->
     val splits = line.split(" ").filter { it.isNotBlank() }
-    val lights = splits.first().drop(1).dropLast(1).withIndex().filter { it.value == '#' }.map { it.index }.toSet()
+    val lights = splits.first().drop(1).dropLast(1).map { it == '#' }
     val buttons = splits.drop(1).dropLast(1).map { w ->
-        w.drop(1).dropLast(1).split(",").map { it.toInt() }.toSet()
+        val indices = w.drop(1).dropLast(1).split(",").map { it.toInt() }
+        List(lights.size) { it in indices }
     }
     val requirements = splits.last().drop(1).dropLast(1).split(",").map { it.toInt() }
     Machine(lights, buttons, requirements)
+//        .debug { "$data parsed to $it" }
 }
 
