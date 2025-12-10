@@ -18,7 +18,7 @@ fun main() = catching {
     go("part 1 ex", 7) { part1(example) }
     go("part 1") { part1(input) }
     go("part 2 ex", 33) { part2(example) }
-    go("part 2") { part2(input) }
+    go("part 2", 17133) { part2(input) }
 }
 
 typealias Lights = List<Boolean>
@@ -65,7 +65,7 @@ data class State(val toGo: List<Int>, val buttons: Buttons, val steps: Int) {
 
     fun isValid() = toGo.filterIndexed { index, v -> v < 0 || v > 0 && buttons.none { it[index] } }.isEmpty()
 
-    fun normalize() = toGo.indices.filter { index -> toGo[index] == 0 && buttons.none { it[index] } }
+    fun normalized() = toGo.indices.filter { index -> toGo[index] == 0 && buttons.none { it[index] } }
         .takeIf { it.isNotEmpty() }?.let {
             copy(
                 toGo = toGo.filterIndexed { index, _ -> index !in it },
@@ -83,18 +83,11 @@ private fun Button.buttonsToString(): String = joinToString(" ") { if (it) " #" 
 
 fun part2(data: String) = parse(data).sumOf { machine ->
 
-    return@sumOf solveIntegerSystem(machine.buttons, machine.requirements).debug()!!.sum().toInt()
+//    return@sumOf solveIntegerSystem(machine.buttons, machine.requirements).debug()!!.sum().toInt()
 
     val state = State(machine.requirements, machine.buttons, 0)
         .debug { "initial state: $it" }
 
-//    while (true) {
-//        val prevSum = state.remainingSum
-//        val prevState = state
-//        state = state.reduceSingles()
-//        if (prevState == state) break
-//    }
-//
     var result = state.steps
     val visited = mutableSetOf<List<Int>>()
     result += dijkstra(
@@ -113,32 +106,31 @@ fun part2(data: String) = parse(data).sumOf { machine ->
             val times = toGo[i]
             val nextToGo = toGo.discharge(b, times)
             val nextButtons = buttons.filtered(nextToGo)
-            listOf(State(nextToGo, nextButtons, steps + times).normalize() to times)
+            listOf(State(nextToGo, nextButtons, steps + times).normalized() to times)
         }
-//            ?: buttons.possibleCouple()?.let { (i, b1, b2) ->
-////                State(toGo, buttons, steps).debug { "found couples on $i: $it" }
-//                val times = toGo[i]
-//                (0..times).map { times1 ->
-//                    val times2 = times - times1
-//                    val nextToGo = toGo.discharge(b1, times1).discharge(b2, times2)
-//                    val nextButtons = buttons.filtered(nextToGo)
-//                    State(nextToGo, nextButtons, steps + times) to times
-//                }
-//            }
+            ?: buttons.possibleCouple()?.let { (i, b1, b2) ->
+//                State(toGo, buttons, steps).debug { "found couples on $i: $it" }
+                val times = toGo[i]
+                (0..times).map { times1 ->
+                    val times2 = times - times1
+                    val nextToGo = toGo.discharge(b1, times1).discharge(b2, times2)
+                    val nextButtons = buttons.filtered(nextToGo)
+                    State(nextToGo, nextButtons, steps + times).normalized() to times
+                }
+            }
             ?: toGo.withIndex().minBy { buttons.count { b -> b[it.index] }.let { if (it == 0) 100 else it } }
                 .let { (i, times) ->
-                    State(toGo, buttons, steps).debug { "will try split on $i: $it" }
-                    val btns = buttons.filter { it[i] }
+//                    State(toGo, buttons, steps).debug { "will try split on $i: $it" }
+                    val btn = buttons.filter { it[i] }.maxBy { it.count { it } }
 //                    .debug { "buttons to split: ${it.map { it.buttonsToString() }}" }
-                    generateDistributions(times, btns.size)
-                        .map { v ->
-                            val nextToGo = v.zip(btns).fold(toGo) { acc, (v, b) -> acc.discharge(b, v) }
-                            val nextButtons = (buttons - btns).filtered(nextToGo)
-                            State(nextToGo, nextButtons, steps + times).normalize() to times
-                        }
+                    ((times downTo 0).map { t ->
+                        val nextToGo = toGo.discharge(btn, t)
+                        val nextButtons = (buttons.filterNot { it == btn }).filtered(nextToGo)
+                        State(nextToGo, nextButtons, steps + t).normalized() to t
+                    })
 //                        .filter { (state) -> state.isValid() }
-                        .toList()
-                        .debug { "generated states: ${it.count()}" }
+//                        .toList()
+//                        .debug { "generated states: ${it.count()}" }
                 }
 //            ?: buttons.map { button ->
 //                val nextToGo = toGo.discharge(button)
