@@ -54,20 +54,25 @@ private fun Button.buttonsToString(): String = joinToString(" ") { if (it) " #" 
 fun <T, R> List<T>.mapParallel(op: (T) -> R) = runBlocking { map { async(Dispatchers.Default) { op(it) } }.awaitAll() }
 
 
-fun part2(data: String) = parse(data).sortedByDescending { it.buttons.sumOf { it.count { it } } }.map { machine ->
+fun part2(data: String) =
+    parse(data).sortedByDescending { it.buttons.sumOf { it.count { it } } }.mapParallel { machine ->
 
-    solveExact(machine.requirements, machine.buttons)
-    solveBB(machine.requirements, machine.buttons)
-}.sum()
+        val gj = solveGaussJordan(machine.requirements, machine.buttons)
+        val bb = solveBranchAndBound(machine.requirements, machine.buttons)
+        check(gj.sum() == bb.sum()) { "Gauss-Jordan ${gj} and Branch-and-Bound ${bb} solutions differ for ${machine.requirements}" }
+        bb.sum()
+    }.sum()
 
-private fun solveBB(requirements: List<Int>, buttons: List<Button>): Int {
+private fun solveBranchAndBound(requirements: List<Int>, buttons: List<Button>): List<Int> {
     var best = Int.MAX_VALUE
+    val bestSolution = IntArray(buttons.size)
     val currentSolution = IntArray(buttons.size)
 
     fun branchAndBound(requirements: List<Int>, buttons: List<IndexedValue<Button>>, currentSum: Int) {
         if (currentSum >= best) return
         if (requirements.all { it == 0 }) {
             best = currentSum
+            currentSolution.copyInto(bestSolution)
             return
         }
         if (requirements.any { it < 0 }) return
@@ -120,7 +125,7 @@ private fun solveBB(requirements: List<Int>, buttons: List<Button>): Int {
     }
 
     branchAndBound(requirements, buttons.withIndex().toList(), 0)
-    return best.debug { "partial: $it" }
+    return bestSolution.toList()
 }
 
 fun generateDistributions(total: Int, n: Int): Sequence<List<Int>> = when {
@@ -153,7 +158,7 @@ private fun parse(data: String): List<Machine> = data.reader().readLines().map {
  * Rozwiązuje układ równań Ax = b w liczbach naturalnych (>=0), minimalizując sum(x).
  * Używa eliminacji Gaussa na ułamkach, a następnie przeszukuje zmienne wolne.
  */
-fun solveExact(target: List<Int>, buttons: List<Button>): Long {
+fun solveGaussJordan(target: List<Int>, buttons: List<Button>): List<Int> {
     val rows = target.size
     val cols = buttons.size
 
@@ -222,7 +227,7 @@ fun solveExact(target: List<Int>, buttons: List<Button>): Long {
             if (!res.isInteger() || res.isNegative()) error("No solution")
             totalMoves += res.toLong()
         }
-        return totalMoves
+        return matrix.map { it[cols].toLong().toInt() }
     }
 
     // 4. Przeszukiwanie przestrzeni zmiennych wolnych
@@ -292,5 +297,5 @@ fun solveExact(target: List<Int>, buttons: List<Button>): Long {
 
     search(0, LongArray(freeVarsIndices.size))
     require(solutionFound) { "No solution found" }
-    return minTotalMoves
+    return listOf(minTotalMoves.toInt())
 }
