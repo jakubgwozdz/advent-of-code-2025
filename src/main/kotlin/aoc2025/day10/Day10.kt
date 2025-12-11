@@ -14,6 +14,7 @@ import provideInput
 import kotlin.collections.indices
 
 fun main() = catching {
+
     val (event, day) = eventAndDayFromPackage { }
     val input = provideInput(event, day)
     val example = """
@@ -21,8 +22,12 @@ fun main() = catching {
         [...#.] (0,2,3,4) (2,3) (0,4) (0,1,2) (1,2,3,4) {7,5,12,7,2}
         [.###.#] (0,1,2,3,4) (0,3,4) (0,1,2,4,5) (1,2) {10,11,11,5,10,5}
     """.trimIndent()
+    val example2 = """
+        [###......#] (0,2,4,5,6,7,8,9) (5,7) (0,3,4,7) (4,5) (0,3,4,7,9) (2,5) (4,9) (1,3,5,8) (0,1,3,9) (0,5,6,7,8,9) (0,3) (0,1,2,6,9) (1,3,6,7,8,9) {42,26,20,54,57,38,17,48,19,61}
+    """.trimIndent()
     go("part 1 ex", 7) { part1(example) }
     go("part 1") { part1(input) }
+    go("part 2 ex 2", 99) { part2(example2) }
     go("part 2 ex", 33) { part2(example) }
     go("part 2", 17133) { part2(input) }
 }
@@ -31,6 +36,16 @@ typealias Lights = List<Boolean>
 typealias Button = List<Boolean>
 
 data class Machine(val lights: Lights, val buttons: List<Button>, val requirements: List<Int>)
+private fun parse(data: String): List<Machine> = data.reader().readLines().map { line ->
+    val splits = line.split(" ").filter { it.isNotBlank() }
+    val lights = splits.first().drop(1).dropLast(1).map { it == '#' }
+    val buttons = splits.drop(1).dropLast(1).map { w ->
+        val indices = w.drop(1).dropLast(1).split(",").map { it.toInt() }
+        List(lights.size) { it in indices }
+    }.sortedBy { it.buttonsToString() }
+    val requirements = splits.last().drop(1).dropLast(1).split(",").map { it.toInt() }
+    Machine(lights, buttons, requirements)
+}
 
 fun part1(data: String): Any = parse(data).sumOf { machine ->
     dijkstra(
@@ -57,9 +72,10 @@ fun <T, R> List<T>.mapParallel(op: (T) -> R) = runBlocking { map { async(Dispatc
 fun part2(data: String) =
     parse(data).sortedByDescending { it.buttons.sumOf { it.count { it } } }.mapParallel { machine ->
 
-        val gj = solveGaussJordan(machine.requirements, machine.buttons)
-        val bb = solveBranchAndBound(machine.requirements, machine.buttons)
-        check(gj.sum() == bb.sum()) { "Gauss-Jordan ${gj} and Branch-and-Bound ${bb} solutions differ for ${machine.requirements}" }
+//        val gj = solveGaussJordan(machine.requirements, machine.buttons)
+//        val bb = solveBranchAndBound(machine.requirements, machine.buttons)
+        val gj = solveGaussJordanAllSolutions(machine.requirements, machine.buttons)
+            .minBy { it.sum() }.map { it.toInt() }
         gj.sum()
     }.sum()
 
@@ -128,41 +144,10 @@ private fun solveBranchAndBound(requirements: List<Int>, buttons: List<Button>):
     return bestSolution.toList()
 }
 
-fun generateDistributions(total: Int, n: Int): Sequence<List<Int>> = when {
-    n == 1 -> sequenceOf(listOf(total))
-    n <= 0 -> emptySequence()
-    else -> sequence {
-        for (i in 0..total) {
-            val remainingSum = total - i
-            val subDistributions = generateDistributions(remainingSum, n - 1)
-            for (sub in subDistributions) {
-                yield((listOf(i) + sub))
-            }
-        }
-    }
-}
-
-private fun parse(data: String): List<Machine> = data.reader().readLines().map { line ->
-    val splits = line.split(" ").filter { it.isNotBlank() }
-    val lights = splits.first().drop(1).dropLast(1).map { it == '#' }
-    val buttons = splits.drop(1).dropLast(1).map { w ->
-        val indices = w.drop(1).dropLast(1).split(",").map { it.toInt() }
-        List(lights.size) { it in indices }
-    }.sortedBy { it.buttonsToString() }
-    val requirements = splits.last().drop(1).dropLast(1).split(",").map { it.toInt() }
-    Machine(lights, buttons, requirements)
-}
-
-
-/**
- * Rozwiązuje układ równań Ax = b w liczbach naturalnych (>=0).
- * Zwraca listę mnożników dla każdego przycisku, która daje najmniejszą sumę naciśnięć.
- */
-fun solveGaussJordan(target: List<Int>, buttons: List<Button>): List<Int> {
+fun solveGaussJordanAllSolutions(target: List<Int>, buttons: List<Button>): List<List<Long>> {
     val rows = target.size
     val cols = buttons.size
 
-    // 1. Budujemy macierz rozszerzoną [A | b] używając ułamków
     val matrix = Array(rows) { r ->
         Array(cols + 1) { c ->
             if (c < cols) Fraction.from(buttons[c][r])
@@ -170,7 +155,6 @@ fun solveGaussJordan(target: List<Int>, buttons: List<Button>): List<Int> {
         }
     }
 
-    // 2. Eliminacja Gaussa-Jordana (RREF)
     val pivotColForRow = IntArray(rows) { -1 }
     val isPivotCol = BooleanArray(cols)
     var pivotRow = 0
@@ -178,30 +162,22 @@ fun solveGaussJordan(target: List<Int>, buttons: List<Button>): List<Int> {
     for (c in 0 until cols) {
         if (pivotRow == rows) break
 
-        // Wybór pivota
         var maxRow = pivotRow
-        while (maxRow < rows && matrix[maxRow][c].num == 0L) {
-            maxRow++
-        }
-        if (maxRow == rows) continue // Kolumna zerowa
+        while (maxRow < rows && matrix[maxRow][c].num == 0L) maxRow++
+        if (maxRow == rows) continue
 
-        // Zamiana wierszy
         val temp = matrix[pivotRow]
         matrix[pivotRow] = matrix[maxRow]
         matrix[maxRow] = temp
 
-        // Normalizacja wiersza
         val pivotVal = matrix[pivotRow][c]
         for (j in c..cols) matrix[pivotRow][j] = matrix[pivotRow][j] / pivotVal
 
-        // Zerowanie kolumny w innych wierszach
         for (r in 0 until rows) {
             if (r != pivotRow) {
                 val factor = matrix[r][c]
                 if (factor.num != 0L) {
-                    for (j in c..cols) {
-                        matrix[r][j] = matrix[r][j] - (factor * matrix[pivotRow][j])
-                    }
+                    for (j in c..cols) matrix[r][j] = matrix[r][j] - (factor * matrix[pivotRow][j])
                 }
             }
         }
@@ -211,59 +187,41 @@ fun solveGaussJordan(target: List<Int>, buttons: List<Button>): List<Int> {
         pivotRow++
     }
 
-    // Sprawdzenie sprzeczności
     for (r in pivotRow until rows) {
-        if (matrix[r][cols].num != 0L) error("Inconsistent system")
+        if (matrix[r][cols].num != 0L) return emptyList()
     }
 
-    // 3. Identyfikacja zmiennych wolnych
     val freeVarsIndices = (0 until cols).filter { !isPivotCol[it] }
+    val allSolutions = mutableListOf<List<Long>>()
 
-    // CASE A: Układ oznaczony (brak zmiennych wolnych)
     if (freeVarsIndices.isEmpty()) {
         val result = LongArray(cols)
         for (r in 0 until pivotRow) {
             val res = matrix[r][cols]
-            // Musi być całkowite i nieujemne
-            if (!res.isInteger() || res.isNegative()) error("No solution")
-            // Pivot w wierszu r odpowiada kolumnie pivotColForRow[r]
+            if (!res.isInteger() || res.isNegative()) return emptyList()
             result[pivotColForRow[r]] = res.toLong()
         }
-        return result.toList().map { it.toInt() }
+        return listOf(result.toList())
     }
-
-    // CASE B: Układ nieoznaczony (zmienne wolne) - szukamy minimum
-    var minTotalMoves = Long.MAX_VALUE
-    var bestSolution = LongArray(0)
 
     val limit = target.max().toLong()
 
     fun search(idx: Int, freeVarsValues: LongArray) {
-        // Pruning: Jeśli same zmienne wolne przekraczają dotychczasowe minimum
-        if (freeVarsValues.sum() >= minTotalMoves) return
-
         if (idx == freeVarsIndices.size) {
-            // Wszystkie wolne ustalone -> wyliczamy zależne (pivoty) i budujemy pełne rozwiązanie
             val currentSolution = LongArray(cols)
-
-            // Wstawiamy zmienne wolne
             for (i in freeVarsIndices.indices) {
                 currentSolution[freeVarsIndices[i]] = freeVarsValues[i]
             }
 
-            var currentTotal = freeVarsValues.sum()
             var possible = true
-
             for (r in 0 until pivotRow) {
                 var valPivot = matrix[r][cols] // Stała
 
-                // Odejmujemy wpływ zmiennych wolnych: x_pivot = b - sum(coeff * x_free)
                 for (i in freeVarsIndices.indices) {
                     val colIdx = freeVarsIndices[i]
                     val coeff = matrix[r][colIdx]
                     if (coeff.num != 0L) {
-                        val contribution = coeff * Fraction(freeVarsValues[i])
-                        valPivot = valPivot - contribution
+                        valPivot = valPivot - (coeff * Fraction(freeVarsValues[i]))
                     }
                 }
 
@@ -271,30 +229,21 @@ fun solveGaussJordan(target: List<Int>, buttons: List<Button>): List<Int> {
                     possible = false
                     break
                 }
-
-                val pivotLong = valPivot.toLong()
-                currentSolution[pivotColForRow[r]] = pivotLong
-                currentTotal += pivotLong
+                currentSolution[pivotColForRow[r]] = valPivot.toLong()
             }
 
             if (possible) {
-                if (currentTotal < minTotalMoves) {
-                    minTotalMoves = currentTotal
-                    bestSolution = currentSolution // Kopiowanie niepotrzebne, bo tworzymy nowe array w każdej liści
-                }
+                allSolutions.add(currentSolution.toList())
             }
             return
         }
 
-        // Iteracja zmiennej wolnej (od 0 w górę dla minimalizacji)
         for (v in 0L..limit) {
             freeVarsValues[idx] = v
             search(idx + 1, freeVarsValues)
-            if (freeVarsValues.take(idx + 1).sum() >= minTotalMoves) break
         }
     }
 
     search(0, LongArray(freeVarsIndices.size))
-
-    return bestSolution.toList().map { it.toInt() }
+    return allSolutions
 }
