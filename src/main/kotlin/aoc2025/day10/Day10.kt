@@ -4,6 +4,7 @@ import catching
 import debug
 import go
 import eventAndDayFromPackage
+import helpers.Fraction
 import helpers.search.dijkstra
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -28,9 +29,8 @@ fun main() = catching {
 
 typealias Lights = List<Boolean>
 typealias Button = List<Boolean>
-typealias Buttons = List<Button>
 
-data class Machine(val lights: Lights, val buttons: Buttons, val requirements: List<Int>)
+data class Machine(val lights: Lights, val buttons: List<Button>, val requirements: List<Int>)
 
 fun part1(data: String): Any = parse(data).sumOf { machine ->
     dijkstra(
@@ -54,12 +54,17 @@ private fun Button.buttonsToString(): String = joinToString(" ") { if (it) " #" 
 fun <T, R> List<T>.mapParallel(op: (T) -> R) = runBlocking { map { async(Dispatchers.Default) { op(it) } }.awaitAll() }
 
 
-fun part2(data: String) = parse(data).sortedByDescending { it.requirements.sum() }.mapParallel { machine ->
+fun part2(data: String) = parse(data).sortedByDescending { it.buttons.sumOf { it.count { it } } }.map { machine ->
 
+    solveExact(machine.requirements, machine.buttons)
+    solveBB(machine.requirements, machine.buttons)
+}.sum()
+
+private fun solveBB(requirements: List<Int>, buttons: List<Button>): Int {
     var best = Int.MAX_VALUE
-    val currentSolution = IntArray(machine.buttons.size)
+    val currentSolution = IntArray(buttons.size)
 
-    fun solveDSF(requirements: List<Int>, buttons: Iterable<IndexedValue<Button>>, currentSum: Int) {
+    fun branchAndBound(requirements: List<Int>, buttons: List<IndexedValue<Button>>, currentSum: Int) {
         if (currentSum >= best) return
         if (requirements.all { it == 0 }) {
             best = currentSum
@@ -70,16 +75,20 @@ fun part2(data: String) = parse(data).sortedByDescending { it.requirements.sum()
 
         var nextColumn = 0
         var contributors = Int.MAX_VALUE
-        requirements.indices.forEach {column ->
-           if (requirements[column] > 0) {
-               val count = buttons.count { it.value[column] }
-               if (count == 0) return
-               if (count < contributors) {
-                   contributors = count
-                   nextColumn = column
-               }
-               if (contributors == 1) return@forEach
-           }
+        requirements.indices.forEach { column ->
+            if (requirements[column] > 0) {
+                var i = 0
+                var count = 0
+                while (i < buttons.size) {
+                    if (buttons[i].value[column]) count++
+                    if (count >= contributors) return@forEach
+                    i++
+                }
+                if (count == 0) return
+                contributors = count
+                nextColumn = column
+                if (contributors == 1) return@forEach
+            }
         }
 
         if (contributors == 1) {
@@ -87,7 +96,7 @@ fun part2(data: String) = parse(data).sortedByDescending { it.requirements.sum()
             val times = requirements[nextColumn]
             if (currentSum + times >= best) return
             currentSolution[nextBtn.index] += times
-            solveDSF(
+            branchAndBound(
                 requirements.discharge(nextBtn.value, times),
                 buttons.filterNot { it.index == nextBtn.index },
                 currentSum + times
@@ -98,7 +107,7 @@ fun part2(data: String) = parse(data).sortedByDescending { it.requirements.sum()
             (requirements[nextColumn] downTo 0).forEach { times ->
                 if (currentSum + times < best) {
                     currentSolution[nextBtn.index] += times
-                    solveDSF(
+                    branchAndBound(
                         requirements.discharge(nextBtn.value, times),
                         buttons.filterNot { it.index == nextBtn.index },
                         currentSum + times
@@ -110,9 +119,9 @@ fun part2(data: String) = parse(data).sortedByDescending { it.requirements.sum()
 
     }
 
-    solveDSF(machine.requirements, machine.buttons.withIndex(), 0)
-    return@mapParallel best
-}.sum()
+    branchAndBound(requirements, buttons.withIndex().toList(), 0)
+    return best.debug { "partial: $it" }
+}
 
 fun generateDistributions(total: Int, n: Int): Sequence<List<Int>> = when {
     n == 1 -> sequenceOf(listOf(total))
@@ -139,3 +148,149 @@ private fun parse(data: String): List<Machine> = data.reader().readLines().map {
     Machine(lights, buttons, requirements)
 }
 
+
+/**
+ * Rozwiązuje układ równań Ax = b w liczbach naturalnych (>=0), minimalizując sum(x).
+ * Używa eliminacji Gaussa na ułamkach, a następnie przeszukuje zmienne wolne.
+ */
+fun solveExact(target: List<Int>, buttons: List<Button>): Long {
+    val rows = target.size
+    val cols = buttons.size
+
+    // 1. Budujemy macierz rozszerzoną [A | b] używając ułamków
+    val matrix = Array(rows) { r ->
+        Array(cols + 1) { c ->
+            if (c < cols) Fraction.from(buttons[c][r])
+            else Fraction.from(target[r])
+        }
+    }
+
+    // 2. Eliminacja Gaussa-Jordana (RREF)
+    val pivotColForRow = IntArray(rows) { -1 }
+    val isPivotCol = BooleanArray(cols)
+    var pivotRow = 0
+
+    for (c in 0 until cols) {
+        if (pivotRow == rows) break
+
+        // Wybór pivota (szukamy niezerowego)
+        var maxRow = pivotRow
+        while (maxRow < rows && matrix[maxRow][c].num == 0L) {
+            maxRow++
+        }
+        if (maxRow == rows) continue // Kolumna zerowa
+
+        // Zamiana wierszy
+        val temp = matrix[pivotRow]
+        matrix[pivotRow] = matrix[maxRow]
+        matrix[maxRow] = temp
+
+        // Normalizacja wiersza (dzielimy przez pivot)
+        val pivotVal = matrix[pivotRow][c]
+        for (j in c..cols) matrix[pivotRow][j] = matrix[pivotRow][j] / pivotVal
+
+        // Zerowanie kolumny w innych wierszach
+        for (r in 0 until rows) {
+            if (r != pivotRow) {
+                val factor = matrix[r][c]
+                if (factor.num != 0L) {
+                    for (j in c..cols) {
+                        matrix[r][j] = matrix[r][j] - (factor * matrix[pivotRow][j])
+                    }
+                }
+            }
+        }
+
+        pivotColForRow[pivotRow] = c
+        isPivotCol[c] = true
+        pivotRow++
+    }
+
+    // Sprawdzenie sprzeczności: wiersz [0 0 ... 0 | !=0]
+    for (r in pivotRow until rows) {
+        if (matrix[r][cols].num != 0L) error("Inconsistent system")
+    }
+
+    // 3. Identyfikacja zmiennych wolnych
+    val freeVarsIndices = (0 until cols).filter { !isPivotCol[it] }
+
+    // Jeśli brak zmiennych wolnych (układ oznaczony), sprawdzamy to jedno rozwiązanie
+    if (freeVarsIndices.isEmpty()) {
+        var totalMoves = 0L
+        for (r in 0 until pivotRow) {
+            val res = matrix[r][cols]
+            if (!res.isInteger() || res.isNegative()) error("No solution")
+            totalMoves += res.toLong()
+        }
+        return totalMoves
+    }
+
+    // 4. Przeszukiwanie przestrzeni zmiennych wolnych
+    var minTotalMoves = Long.MAX_VALUE
+    var solutionFound = false
+
+    // Upper bound dla zmiennych wolnych.
+    // Każdy przycisk (wektor) ma wagi nieujemne (0 lub 1).
+    // Zatem zmienna x_i nie może być większa niż maksymalna wartość w wektorze docelowym.
+    // (Bardziej rygorystyczne: min(target[k] / button[k]) dla button[k] > 0)
+    val limit = target.max().toLong()
+
+    fun search(idx: Int, freeVarsValues: LongArray) {
+        // Pruning: Jeśli suma samych zmiennych wolnych przekracza minimum, to nie ma sensu (bo zależne też są >= 0)
+        // Uwaga: To działa tylko, jeśli rozwiązanie pivotów też dodaje do sumy (a dodaje, bo >= 0).
+        if (freeVarsValues.sum() >= minTotalMoves) return
+
+        if (idx == freeVarsIndices.size) {
+            // Wszystkie wolne ustalone -> wyliczamy zależne
+            var currentTotal = 0L
+            // Dodajemy koszt zmiennych wolnych
+            for (v in freeVarsValues) currentTotal += v
+            if (currentTotal >= minTotalMoves) return
+
+            var possible = true
+            for (r in 0 until pivotRow) {
+                // Równanie: x_pivot + sum(coeff * x_free) = constant
+                // x_pivot = constant - sum(coeff * x_free)
+                var valPivot = matrix[r][cols] // Stała
+
+                for (i in freeVarsIndices.indices) {
+                    val colIdx = freeVarsIndices[i]
+                    val coeff = matrix[r][colIdx]
+                    if (coeff.num != 0L) {
+                        val contribution = coeff * Fraction(freeVarsValues[i])
+                        valPivot = valPivot - contribution
+                    }
+                }
+
+                if (!valPivot.isInteger() || valPivot.isNegative()) {
+                    possible = false
+                    break
+                }
+                currentTotal += valPivot.toLong()
+            }
+
+            if (possible) {
+                if (currentTotal < minTotalMoves) {
+                    minTotalMoves = currentTotal
+                    solutionFound = true
+                }
+            }
+            return
+        }
+
+        // Iteracja dla kolejnej zmiennej wolnej
+        // Zmieniamy kolejność pętli 0..limit vs limit downTo 0 w zależności czy chcemy szybko znaleźć *jakieś* rozwiązanie,
+        // czy szybko znaleźć *małe*. Dla minimalizacji lepiej od 0 w górę.
+        for (v in 0L..limit) {
+            freeVarsValues[idx] = v
+            search(idx + 1, freeVarsValues)
+            // Prosty heuristic pruning w pętli:
+            // Jeśli już po ustawieniu jednej zmiennej przekraczamy limit (bo funkcja jest rosnąca), przerywamy pętlę
+            if (freeVarsValues.take(idx + 1).sum() >= minTotalMoves) break
+        }
+    }
+
+    search(0, LongArray(freeVarsIndices.size))
+    require(solutionFound) { "No solution found" }
+    return minTotalMoves
+}
