@@ -60,7 +60,7 @@ fun part2(data: String) =
         val gj = solveGaussJordan(machine.requirements, machine.buttons)
         val bb = solveBranchAndBound(machine.requirements, machine.buttons)
         check(gj.sum() == bb.sum()) { "Gauss-Jordan ${gj} and Branch-and-Bound ${bb} solutions differ for ${machine.requirements}" }
-        bb.sum()
+        gj.sum()
     }.sum()
 
 private fun solveBranchAndBound(requirements: List<Int>, buttons: List<Button>): List<Int> {
@@ -155,8 +155,8 @@ private fun parse(data: String): List<Machine> = data.reader().readLines().map {
 
 
 /**
- * Rozwiązuje układ równań Ax = b w liczbach naturalnych (>=0), minimalizując sum(x).
- * Używa eliminacji Gaussa na ułamkach, a następnie przeszukuje zmienne wolne.
+ * Rozwiązuje układ równań Ax = b w liczbach naturalnych (>=0).
+ * Zwraca listę mnożników dla każdego przycisku, która daje najmniejszą sumę naciśnięć.
  */
 fun solveGaussJordan(target: List<Int>, buttons: List<Button>): List<Int> {
     val rows = target.size
@@ -178,7 +178,7 @@ fun solveGaussJordan(target: List<Int>, buttons: List<Button>): List<Int> {
     for (c in 0 until cols) {
         if (pivotRow == rows) break
 
-        // Wybór pivota (szukamy niezerowego)
+        // Wybór pivota
         var maxRow = pivotRow
         while (maxRow < rows && matrix[maxRow][c].num == 0L) {
             maxRow++
@@ -190,7 +190,7 @@ fun solveGaussJordan(target: List<Int>, buttons: List<Button>): List<Int> {
         matrix[pivotRow] = matrix[maxRow]
         matrix[maxRow] = temp
 
-        // Normalizacja wiersza (dzielimy przez pivot)
+        // Normalizacja wiersza
         val pivotVal = matrix[pivotRow][c]
         for (j in c..cols) matrix[pivotRow][j] = matrix[pivotRow][j] / pivotVal
 
@@ -211,7 +211,7 @@ fun solveGaussJordan(target: List<Int>, buttons: List<Button>): List<Int> {
         pivotRow++
     }
 
-    // Sprawdzenie sprzeczności: wiersz [0 0 ... 0 | !=0]
+    // Sprawdzenie sprzeczności
     for (r in pivotRow until rows) {
         if (matrix[r][cols].num != 0L) error("Inconsistent system")
     }
@@ -219,45 +219,45 @@ fun solveGaussJordan(target: List<Int>, buttons: List<Button>): List<Int> {
     // 3. Identyfikacja zmiennych wolnych
     val freeVarsIndices = (0 until cols).filter { !isPivotCol[it] }
 
-    // Jeśli brak zmiennych wolnych (układ oznaczony), sprawdzamy to jedno rozwiązanie
+    // CASE A: Układ oznaczony (brak zmiennych wolnych)
     if (freeVarsIndices.isEmpty()) {
-        var totalMoves = 0L
+        val result = LongArray(cols)
         for (r in 0 until pivotRow) {
             val res = matrix[r][cols]
+            // Musi być całkowite i nieujemne
             if (!res.isInteger() || res.isNegative()) error("No solution")
-            totalMoves += res.toLong()
+            // Pivot w wierszu r odpowiada kolumnie pivotColForRow[r]
+            result[pivotColForRow[r]] = res.toLong()
         }
-        return matrix.map { it[cols].toLong().toInt() }
+        return result.toList().map { it.toInt() }
     }
 
-    // 4. Przeszukiwanie przestrzeni zmiennych wolnych
+    // CASE B: Układ nieoznaczony (zmienne wolne) - szukamy minimum
     var minTotalMoves = Long.MAX_VALUE
-    var solutionFound = false
+    var bestSolution = LongArray(0)
 
-    // Upper bound dla zmiennych wolnych.
-    // Każdy przycisk (wektor) ma wagi nieujemne (0 lub 1).
-    // Zatem zmienna x_i nie może być większa niż maksymalna wartość w wektorze docelowym.
-    // (Bardziej rygorystyczne: min(target[k] / button[k]) dla button[k] > 0)
     val limit = target.max().toLong()
 
     fun search(idx: Int, freeVarsValues: LongArray) {
-        // Pruning: Jeśli suma samych zmiennych wolnych przekracza minimum, to nie ma sensu (bo zależne też są >= 0)
-        // Uwaga: To działa tylko, jeśli rozwiązanie pivotów też dodaje do sumy (a dodaje, bo >= 0).
+        // Pruning: Jeśli same zmienne wolne przekraczają dotychczasowe minimum
         if (freeVarsValues.sum() >= minTotalMoves) return
 
         if (idx == freeVarsIndices.size) {
-            // Wszystkie wolne ustalone -> wyliczamy zależne
-            var currentTotal = 0L
-            // Dodajemy koszt zmiennych wolnych
-            for (v in freeVarsValues) currentTotal += v
-            if (currentTotal >= minTotalMoves) return
+            // Wszystkie wolne ustalone -> wyliczamy zależne (pivoty) i budujemy pełne rozwiązanie
+            val currentSolution = LongArray(cols)
 
+            // Wstawiamy zmienne wolne
+            for (i in freeVarsIndices.indices) {
+                currentSolution[freeVarsIndices[i]] = freeVarsValues[i]
+            }
+
+            var currentTotal = freeVarsValues.sum()
             var possible = true
+
             for (r in 0 until pivotRow) {
-                // Równanie: x_pivot + sum(coeff * x_free) = constant
-                // x_pivot = constant - sum(coeff * x_free)
                 var valPivot = matrix[r][cols] // Stała
 
+                // Odejmujemy wpływ zmiennych wolnych: x_pivot = b - sum(coeff * x_free)
                 for (i in freeVarsIndices.indices) {
                     val colIdx = freeVarsIndices[i]
                     val coeff = matrix[r][colIdx]
@@ -271,31 +271,30 @@ fun solveGaussJordan(target: List<Int>, buttons: List<Button>): List<Int> {
                     possible = false
                     break
                 }
-                currentTotal += valPivot.toLong()
+
+                val pivotLong = valPivot.toLong()
+                currentSolution[pivotColForRow[r]] = pivotLong
+                currentTotal += pivotLong
             }
 
             if (possible) {
                 if (currentTotal < minTotalMoves) {
                     minTotalMoves = currentTotal
-                    solutionFound = true
+                    bestSolution = currentSolution // Kopiowanie niepotrzebne, bo tworzymy nowe array w każdej liści
                 }
             }
             return
         }
 
-        // Iteracja dla kolejnej zmiennej wolnej
-        // Zmieniamy kolejność pętli 0..limit vs limit downTo 0 w zależności czy chcemy szybko znaleźć *jakieś* rozwiązanie,
-        // czy szybko znaleźć *małe*. Dla minimalizacji lepiej od 0 w górę.
+        // Iteracja zmiennej wolnej (od 0 w górę dla minimalizacji)
         for (v in 0L..limit) {
             freeVarsValues[idx] = v
             search(idx + 1, freeVarsValues)
-            // Prosty heuristic pruning w pętli:
-            // Jeśli już po ustawieniu jednej zmiennej przekraczamy limit (bo funkcja jest rosnąca), przerywamy pętlę
             if (freeVarsValues.take(idx + 1).sum() >= minTotalMoves) break
         }
     }
 
     search(0, LongArray(freeVarsIndices.size))
-    require(solutionFound) { "No solution found" }
-    return listOf(minTotalMoves.toInt())
+
+    return bestSolution.toList().map { it.toInt() }
 }
