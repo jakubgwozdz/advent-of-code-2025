@@ -36,6 +36,7 @@ typealias Lights = List<Boolean>
 typealias Button = List<Boolean>
 
 data class Machine(val lights: Lights, val buttons: List<Button>, val requirements: List<Int>)
+
 private fun parse(data: String): List<Machine> = data.reader().readLines().map { line ->
     val splits = line.split(" ").filter { it.isNotBlank() }
     val lights = splits.first().drop(1).dropLast(1).map { it == '#' }
@@ -72,7 +73,6 @@ fun <T, R> List<T>.mapParallel(op: (T) -> R) = runBlocking { map { async(Dispatc
 fun part2(data: String) =
     parse(data).sortedByDescending { it.buttons.sumOf { it.count { it } } }.mapParallel { machine ->
 
-//        val gj = solveGaussJordan(machine.requirements, machine.buttons)
 //        val bb = solveBranchAndBound(machine.requirements, machine.buttons)
         val gj = solveGaussJordanAllSolutions(machine.requirements, machine.buttons)
             .minBy { it.sum() }.map { it.toInt() }
@@ -159,7 +159,7 @@ fun solveGaussJordanAllSolutions(target: List<Int>, buttons: List<Button>): List
     val isPivotCol = BooleanArray(cols)
     var pivotRow = 0
 
-    for (c in 0 until cols) {
+    for (c in 0..<cols) {
         if (pivotRow == rows) break
 
         var maxRow = pivotRow
@@ -173,7 +173,7 @@ fun solveGaussJordanAllSolutions(target: List<Int>, buttons: List<Button>): List
         val pivotVal = matrix[pivotRow][c]
         for (j in c..cols) matrix[pivotRow][j] = matrix[pivotRow][j] / pivotVal
 
-        for (r in 0 until rows) {
+        for (r in 0..<rows) {
             if (r != pivotRow) {
                 val factor = matrix[r][c]
                 if (factor.num != 0L) {
@@ -187,16 +187,16 @@ fun solveGaussJordanAllSolutions(target: List<Int>, buttons: List<Button>): List
         pivotRow++
     }
 
-    for (r in pivotRow until rows) {
+    for (r in pivotRow..<rows) {
         if (matrix[r][cols].num != 0L) return emptyList()
     }
 
-    val freeVarsIndices = (0 until cols).filter { !isPivotCol[it] }
+    val freeVarsIndices = (0..<cols).filter { !isPivotCol[it] }
     val allSolutions = mutableListOf<List<Long>>()
 
     if (freeVarsIndices.isEmpty()) {
         val result = LongArray(cols)
-        for (r in 0 until pivotRow) {
+        for (r in 0..<pivotRow) {
             val res = matrix[r][cols]
             if (!res.isInteger() || res.isNegative()) return emptyList()
             result[pivotColForRow[r]] = res.toLong()
@@ -214,14 +214,14 @@ fun solveGaussJordanAllSolutions(target: List<Int>, buttons: List<Button>): List
             }
 
             var possible = true
-            for (r in 0 until pivotRow) {
-                var valPivot = matrix[r][cols] // Stała
+            for (r in 0..<pivotRow) {
+                var valPivot = matrix[r][cols]
 
                 for (i in freeVarsIndices.indices) {
                     val colIdx = freeVarsIndices[i]
                     val coeff = matrix[r][colIdx]
                     if (coeff.num != 0L) {
-                        valPivot = valPivot - (coeff * Fraction(freeVarsValues[i]))
+                        valPivot -= (coeff * Fraction(freeVarsValues[i]))
                     }
                 }
 
